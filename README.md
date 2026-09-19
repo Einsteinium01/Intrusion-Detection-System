@@ -1,4 +1,4 @@
-# Intelligent Network Traffic Analyzer
+# Intelligent Real-time Network Traffic Analyzer for Intrusion Detection using Machine Learning 
 
 UNDER DEVELOPMENT
 
