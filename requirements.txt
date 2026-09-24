@@ -1,33 +1,8 @@
-# ---------------------------------------------------------------------------
-# Intelligent Network Traffic Analyzer - Python dependencies
-# Install with:  pip install -r requirements.txt
-# ---------------------------------------------------------------------------
-
-# --- Backend / Web layer ---------------------------------------------------
-Flask==3.0.3                # REST API + serves the built React dashboard
-Flask-Cors==4.0.1           # Allows the Vite dev server (port 5173) to call Flask (port 5000)
-Flask-SocketIO==5.3.6       # Pushes live packets/alerts to the browser over WebSockets
-simple-websocket==1.0.0     # WebSocket transport used by Flask-SocketIO in threading mode
-
-# --- Packet capture --------------------------------------------------------
-scapy==2.5.0                # Sniffs live packets and parses TCP/UDP/ICMP headers
-psutil==7.2.2               # Reads true NIC throughput/packet counters in the detection engine
-
-# --- Machine learning ------------------------------------------------------
-scikit-learn==1.5.1         # Random Forest / Decision Tree + evaluation metrics
-xgboost==2.1.1              # Compared against Random Forest in Phase 2
-pandas==2.2.2               # Loads and cleans the CICIDS2017 CSV files
-numpy==1.26.4               # Numerical arrays underneath pandas / scikit-learn
-joblib==1.4.2               # Serialises the trained model to models/model.pkl
-pyarrow>=16.0.0             # Parquet I/O for the cleaned dataset cache
-
-# --- Plots for the offline training report ---------------------------------
-matplotlib==3.9.2           # Confusion matrix / feature importance images
-seaborn==0.13.2             # Nicer statistical plots on top of matplotlib
-
-# --- Configuration ---------------------------------------------------------
-python-dotenv==1.0.1        # Reads local overrides from a .env file
-
-# --- Testing ---------------------------------------------------------------
-pytest==8.3.2               # Unit tests in tests/
-pytest-cov==5.0.0           # Test coverage report
+blinker==1.9.0
+click==8.5.0
+Flask==3.1.3
+flask-cors==6.0.5
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+Werkzeug==3.1.8
