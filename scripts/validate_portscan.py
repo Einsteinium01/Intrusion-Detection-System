@@ -64,6 +64,29 @@ if str(ROOT) not in sys.path:
 from feature_extraction import Flow  # noqa: E402
 
 
+def forward_alert_to_backend(alert: dict, backend_url: str = "http://localhost:5000") -> bool:
+    """
+    Forward detected alert to running NetIntel backend.
+    Triggers real-time Socket.IO broadcast and AI analysis queue.
+    """
+    import urllib.request
+    import json
+
+    url = f"{backend_url.rstrip('/')}/api/v1/alerts"
+    try:
+        data = json.dumps(alert).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            return resp.status in (200, 201)
+    except Exception:
+        return False
+
+
 # ── Synthetic packet / flow factories ─────────────────────────────────────────
 def syn_probe_packet(dst_port, dst_ip, src_ip, ts):
     """A lone unestablished SYN — what `nmap -sS` emits per probed port."""
@@ -204,6 +227,11 @@ def run_hybrid_detection(scanner_ip, target_ip, n_ports):
         print(f"    - distinct ports probed : {a['distinct_ports']}")
         print(f"    - confidence            : {a['confidence_pct']}%")
         print(f"    - detector              : {a['detector']}")
+        # Forward alert to running backend to trigger React UI and AI analysis
+        if forward_alert_to_backend(a):
+            print("    - UI broadcast          : SENT (http://localhost:5000/api/v1/alerts)")
+        else:
+            print("    - UI broadcast          : SKIPPED (backend offline at http://localhost:5000)")
     print(f"\n  => Port scan detected by hybrid?     {'YES' if detected_after else 'NO'}")
     print("  Detection latency bound: <= one 5s sampler cycle after the fan-out")
     print("  threshold is crossed; a final sweep at stop() guarantees no miss.")
@@ -286,6 +314,8 @@ def run_live(target, iface, duration):
         (scan_alerts if r.get("detector") == "heuristic-scan" else ml_alerts).append(
             (time.time(), r)
         )
+        if r.get("detector") == "heuristic-scan":
+            forward_alert_to_backend(r)
 
     engine.register_alert_listener(on_alert)
 

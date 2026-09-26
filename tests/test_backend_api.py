@@ -169,3 +169,53 @@ def test_export_csv_logs(client):
     assert r.headers["Content-Type"].startswith("text/csv")
     assert "attachment" in r.headers.get("Content-Disposition", "")
 
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/alerts — alert injection for external tools (e.g. validate_portscan.py)
+# ---------------------------------------------------------------------------
+def test_inject_alert_success(client):
+    alert_payload = {
+        "id": "test-alert-001",
+        "src_ip": "192.168.1.100",
+        "dst_ip": "192.168.1.1",
+        "attack_type": "PortScan (vertical)",
+        "detector": "heuristic-scan",
+        "confidence_pct": 95.0,
+        "distinct_ports": 25,
+        "is_attack": True,
+    }
+    r = client.post("/api/v1/alerts", json=alert_payload)
+    assert r.status_code == 201
+    data = r.get_json()
+    assert data["status"] == "success"
+    assert data["alert_id"] == "test-alert-001"
+
+    # Verify alert appears in GET /api/v1/alerts
+    r_get = client.get("/api/v1/alerts")
+    assert r_get.status_code == 200
+    alerts = r_get.get_json()["alerts"]
+    matched = [a for a in alerts if a.get("id") == "test-alert-001"]
+    assert len(matched) == 1
+    assert matched[0]["attack_type"] == "PortScan (vertical)"
+
+
+def test_inject_alert_invalid_payload(client):
+    # Non-JSON or missing body
+    r = client.post("/api/v1/alerts", data="not json", content_type="text/plain")
+    assert r.status_code == 400
+    assert "error" in r.get_json()
+
+
+def test_inject_alert_auto_fields(client):
+    # Minimal body without id, timestamp, or is_attack
+    r = client.post("/api/v1/alerts", json={
+        "src_ip": "10.0.0.99",
+        "dst_ip": "10.0.0.5",
+        "attack_type": "PortScan",
+    })
+    assert r.status_code == 201
+    data = r.get_json()
+    assert data["status"] == "success"
+    assert data["alert_id"].startswith("scan-")
+
+

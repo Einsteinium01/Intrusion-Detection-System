@@ -36,7 +36,13 @@ from typing import Any, Dict, Optional
 from pydantic import ValidationError
 
 from backend.ai.config import AIConfig, get_ai_config
-from backend.ai.schemas import AlertAnalysis
+from backend.ai.schemas import (
+    AlertAnalysis,
+    InvestigationResponse,
+    MitreAttack,
+    SeverityLevel,
+    Source,
+)
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +57,7 @@ class LLMProvider(ABC):
 
     Subclasses must implement:
       ``analyze(system_prompt, user_prompt) -> AlertAnalysis``
+      ``investigate(system_prompt, user_prompt) -> InvestigationResponse``
       ``health_check() -> bool``
     """
 
@@ -60,32 +67,18 @@ class LLMProvider(ABC):
         system_prompt: str,
         user_prompt: str,
     ) -> AlertAnalysis:
-        """
-        Send the prompts to the LLM and return a validated AlertAnalysis.
+        ...  # pragma: no cover
 
-        Parameters
-        ----------
-        system_prompt:
-            The role/instruction prompt built by PromptBuilder.
-        user_prompt:
-            The alert-specific user message built by PromptBuilder.
-
-        Raises
-        ------
-        LLMProviderError
-            On API errors, timeout, schema validation failure, or
-            unexpected response structure.
-        """
+    @abstractmethod
+    def investigate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> InvestigationResponse:
         ...  # pragma: no cover
 
     @abstractmethod
     def health_check(self) -> bool:
-        """
-        Return True if the provider is reachable and the API key is valid.
-
-        Should return False (not raise) on failure so callers can handle
-        degraded state gracefully.
-        """
         ...  # pragma: no cover
 
     def __repr__(self) -> str:  # safety: never expose key
@@ -113,14 +106,6 @@ class LLMParseError(LLMProviderError):
 class GroqProvider(LLMProvider):
     """
     Groq API implementation of LLMProvider.
-
-    Uses:
-    - Official ``groq`` Python SDK (synchronous client).
-    - Structured JSON output with strict schema enforcement.
-    - Configurable reasoning effort (passed via the ``reasoning_effort``
-      parameter where supported by the model).
-    - Automatic retry on transient errors (handled by the SDK).
-    - No plaintext API key in any log statement or exception message.
     """
 
     # JSON schema derived from AlertAnalysis for Groq strict structured output
@@ -187,6 +172,35 @@ class GroqProvider(LLMProvider):
         "additionalProperties": False,
     }
 
+    _INVESTIGATION_SCHEMA: Dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "answer": {"type": "string"},
+            "supporting_evidence": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "related_findings": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "sources": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "source_id": {"type": "string"},
+                        "title": {"type": "string"},
+                        "relevance": {"type": "string"},
+                    },
+                    "required": ["source_id", "title", "relevance"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["answer", "supporting_evidence", "related_findings", "sources"],
+        "additionalProperties": False,
+    }
     def __init__(self, config: Optional[AIConfig] = None) -> None:
         """
         Initialise the Groq client.
@@ -281,7 +295,47 @@ class GroqProvider(LLMProvider):
             completion.usage.total_tokens if completion.usage else "?",
         )
 
-        return self._parse_response(raw_content)
+        return self._parse_response(raw_content, AlertAnalysis)
+
+    # ------------------------------------------------------------------
+    def investigate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> InvestigationResponse:
+        t0 = time.perf_counter()
+        try:
+            completion = self._client.chat.completions.create(
+                model=self._config.groq_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "InvestigationResponse",
+                        "strict": True,
+                        "schema": self._INVESTIGATION_SCHEMA,
+                    },
+                },
+                reasoning_effort=self._config.groq_reasoning_effort,
+            )
+        except Exception as exc:
+            safe_msg = self._safe_error_message(exc)
+            self._last_error = safe_msg
+            log.error("GroqProvider.investigate failed: %s", safe_msg)
+            raise LLMProviderError(f"Groq API call failed: {safe_msg}") from None
+
+        elapsed = time.perf_counter() - t0
+        raw_content = completion.choices[0].message.content or ""
+        log.info(
+            "GroqProvider: investigate response received in %.2fs tokens=%s",
+            elapsed,
+            completion.usage.total_tokens if completion.usage else "?",
+        )
+
+        return self._parse_response(raw_content, InvestigationResponse)
 
     # ------------------------------------------------------------------
     def health_check(self) -> bool:
@@ -310,9 +364,9 @@ class GroqProvider(LLMProvider):
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _parse_response(raw_content: str) -> AlertAnalysis:
+    def _parse_response(raw_content: str, model_class: Any = AlertAnalysis) -> Any:
         """
-        Parse and validate the raw LLM response string into AlertAnalysis.
+        Parse and validate the raw LLM response string into the specified Pydantic model.
 
         Raises
         ------
@@ -330,7 +384,7 @@ class GroqProvider(LLMProvider):
             ) from exc
 
         try:
-            return AlertAnalysis.model_validate(data)
+            return model_class.model_validate(data)
         except ValidationError as exc:
             # Summarise validation errors without leaking raw content
             errors = exc.errors()
@@ -365,6 +419,96 @@ class GroqProvider(LLMProvider):
 
 
 # ---------------------------------------------------------------------------
+# Mock implementation
+# ---------------------------------------------------------------------------
+
+
+class MockProvider(LLMProvider):
+    """Deterministic mock LLM provider for offline testing and validation."""
+
+    def __init__(self, config: Optional[AIConfig] = None) -> None:
+        self._config = config or get_ai_config()
+        self._last_error: Optional[str] = None
+
+    def analyze(self, system_prompt: str, user_prompt: str) -> AlertAnalysis:
+        import json
+        import re
+
+        alert_data = {}
+        try:
+            m = re.search(r"```json\s*(\{.*?\})\s*```", user_prompt, re.DOTALL)
+            if m:
+                alert_data = json.loads(m.group(1))
+        except Exception:
+            pass
+
+        attack_type = alert_data.get("attack_type", "PortScan")
+        src_ip = alert_data.get("source_ip", "10.0.0.99")
+        dst_ip = alert_data.get("destination_ip", "10.0.0.5")
+
+        distinct_ports = 25
+        flow_stats = alert_data.get("flow_statistics")
+        if isinstance(flow_stats, dict) and flow_stats.get("distinct_ports"):
+            distinct_ports = flow_stats["distinct_ports"]
+
+        return AlertAnalysis(
+            summary=f"Automated {attack_type} probe activity detected from {src_ip} targeting {dst_ip}.",
+            technical_analysis=(
+                f"Heuristic pattern analysis confirmed rapid unestablished SYN probe connections from {src_ip} "
+                f"across distinct destination ports on {dst_ip}. Characteristic of reconnaissance prior to exploitation."
+            ),
+            severity=SeverityLevel.HIGH,
+            attack_type=attack_type,
+            evidence=[
+                f"Distinct ports probed: {distinct_ports}",
+                f"Source {src_ip} emitted lone SYN probes without completing 3-way handshake",
+                f"Target destination: {dst_ip}",
+            ],
+            mitre_attack=[
+                MitreAttack(
+                    technique_id="T1046",
+                    technique_name="Network Service Discovery",
+                    rationale="Attacker is scanning remote ports to identify running network services and vulnerabilities.",
+                )
+            ],
+            investigation_steps=[
+                f"Inspect edge firewall logs for source IP {src_ip}.",
+                "Check for subsequent intrusion attempts following the reconnaissance sweep.",
+                "Verify whether any targeted ports answered with open SYN-ACK flags.",
+            ],
+            recommended_actions=[
+                f"Temporarily rate-limit or drop traffic from source IP {src_ip} at the perimeter.",
+                "Ensure non-essential listening ports on target hosts are closed or firewalled.",
+                "Review host-based access control rules.",
+            ],
+            sources=[
+                Source(
+                    source_id="MITRE-T1046",
+                    title="MITRE ATT&CK: Network Service Discovery (T1046)",
+                    relevance="Directly covers vertical port scanning and reconnaissance behaviors.",
+                )
+            ],
+        )
+
+    def investigate(self, system_prompt: str, user_prompt: str) -> InvestigationResponse:
+        return InvestigationResponse(
+            answer="The observed activity indicates an automated port scan probing for open services.",
+            supporting_evidence=["Repeated TCP SYN flags with no follow-up data packets"],
+            related_findings=["Reconnaissance sweep across multiple target ports"],
+            sources=[
+                Source(
+                    source_id="MITRE-T1046",
+                    title="Network Service Discovery",
+                    relevance="Explains port scanning techniques and defensive countermeasures.",
+                )
+            ],
+        )
+
+    def health_check(self) -> bool:
+        return True
+
+
+# ---------------------------------------------------------------------------
 # Provider factory
 # ---------------------------------------------------------------------------
 
@@ -388,6 +532,8 @@ def get_llm_provider(config: Optional[AIConfig] = None) -> LLMProvider:
 
     if cfg.llm_provider == "groq":
         _provider_instance = GroqProvider(cfg)
+    elif cfg.llm_provider == "mock":
+        _provider_instance = MockProvider(cfg)
     else:  # pragma: no cover – validated by AIConfig
         raise LLMProviderError(f"Unknown LLM_PROVIDER: '{cfg.llm_provider}'")
 

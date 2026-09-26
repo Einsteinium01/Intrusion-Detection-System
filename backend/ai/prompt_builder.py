@@ -138,21 +138,6 @@ class PromptBuilder:
         alert: AlertContext,
         knowledge: KnowledgeContext | None = None,
     ) -> tuple[str, str]:
-        """
-        Return ``(system_prompt, user_prompt)`` for the given alert.
-
-        Parameters
-        ----------
-        alert:
-            The grounded, immutable AlertContext produced by the IDS.
-        knowledge:
-            Optional RAG context.  Empty in Phase 1.
-
-        Returns
-        -------
-        tuple[str, str]
-            ``(system_prompt, user_prompt)`` ready to pass to the LLM provider.
-        """
         if knowledge is None:
             knowledge = KnowledgeContext()
 
@@ -170,6 +155,39 @@ class PromptBuilder:
             alert.attack_type,
         )
         return self._system_prompt, user_prompt
+
+    def build_investigation(
+        self,
+        alert: AlertContext,
+        question: str,
+        related_alerts: List[str],
+        knowledge: KnowledgeContext | None = None,
+    ) -> tuple[str, str]:
+        if knowledge is None:
+            knowledge = KnowledgeContext()
+
+        alert_json = self._serialise_alert(alert)
+        knowledge_section = self._serialise_knowledge(knowledge)
+        related_section = "\n".join(related_alerts) if related_alerts else "No related alerts."
+
+        system_prompt = """You are a security investigation assistant. Answer the analyst's question based on the provided alert context, related alerts, and knowledge context. Output strict JSON matching the InvestigationResponse schema."""
+
+        user_prompt = f"""
+## INVESTIGATION QUERY
+Question: {question}
+
+## ALERT CONTEXT
+{alert_json}
+
+## RELATED ALERTS
+{related_section}
+
+## UNTRUSTED KNOWLEDGE CONTEXT
+{knowledge_section}
+
+Answer the question factually based ONLY on the evidence above.
+"""
+        return system_prompt, user_prompt
 
     # ------------------------------------------------------------------
     # Private helpers

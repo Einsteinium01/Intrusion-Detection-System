@@ -155,6 +155,49 @@ class AlertAnalyzer:
         )
         return analysis
 
+    def investigate(
+        self,
+        alert: AlertContext,
+        question: str,
+        related_alerts: list[str],
+        knowledge: Optional[KnowledgeContext] = None,
+    ):
+        if not self._config.ai_enabled:
+            raise LLMProviderError("AI analysis is disabled.")
+
+        if not self._config.is_configured():
+            raise LLMProviderError("AI analysis is not configured.")
+
+        provider = self._get_provider()
+
+        if knowledge is None:
+            knowledge = self._retrieve_knowledge(alert)
+
+        system_prompt, user_prompt = self._builder.build_investigation(
+            alert, question, related_alerts, knowledge
+        )
+
+        t0 = time.perf_counter()
+        try:
+            response = provider.investigate(system_prompt, user_prompt)
+        except LLMProviderError:
+            raise
+        except Exception as exc:
+            msg = f"Unexpected error in AlertAnalyzer.investigate: {type(exc).__name__}"
+            self._last_error = msg
+            log.exception(msg)
+            raise LLMProviderError(msg) from exc
+
+        elapsed = time.perf_counter() - t0
+        self._last_analysis_time = elapsed
+        self._last_error = None
+
+        log.info(
+            "AlertAnalyzer: investigate complete alert_id=%s elapsed=%.2fs",
+            alert.alert_id, elapsed
+        )
+        return response
+
     # ------------------------------------------------------------------
     def health_check(self) -> dict:
         """

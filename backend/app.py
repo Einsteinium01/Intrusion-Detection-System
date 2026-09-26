@@ -127,6 +127,11 @@ def create_app() -> Flask:
     # --- DetectionEngine ----------------------------------------------------
     engine = DetectionEngine()
 
+    from backend.ai.queue import get_ai_manager
+    ai_manager = get_ai_manager()
+    ai_manager.set_emit_callback(lambda event, payload: socketio.emit(event, payload) if socketio else None)
+    ai_manager.start()
+
     _last_packet_emit = 0.0
 
     # Register listener: broadcast sampled packets and all threat alerts
@@ -139,6 +144,7 @@ def create_app() -> Flask:
                 # Security alerts are ALWAYS broadcasted immediately
                 if result.get("is_attack"):
                     socketio.emit("alert", result)
+                    ai_manager.enqueue(result)
 
                 # Packet stream is throttled to max ~10 pkts/s (every 100ms) to prevent UI/Socket queue lag
                 if now - _last_packet_emit >= 0.10:
@@ -298,6 +304,53 @@ def create_app() -> Flask:
             "count": len(alerts),
             "alerts": alerts,
         }), 200
+
+    # ── POST /api/v1/alerts ────────────────────────────────────────────────
+    @app.post("/api/v1/alerts")
+    def inject_alert() -> Response:
+        """
+        Ingest an externally detected threat alert (e.g. from validate_portscan.py).
+        Broadcasts the alert via Socket.IO and enqueues it for AI analysis.
+        """
+        body = request.get_json(silent=True)
+        if not body or not isinstance(body, dict):
+            return jsonify({"error": "Request body must be a JSON alert object."}), 400
+
+        now = time.time()
+        alert = dict(body)
+        if "id" not in alert:
+            import numpy as np
+            alert["id"] = f"scan-{int(now * 1000)}-{np.random.randint(100, 999)}"
+        if "timestamp" not in alert:
+            alert["timestamp"] = now
+        if "timestamp_str" not in alert:
+            alert["timestamp_str"] = datetime.fromtimestamp(alert["timestamp"]).strftime("%H:%M:%S.%f")[:-3]
+        if "is_attack" not in alert:
+            alert["is_attack"] = True
+
+        # 1. Update DetectionEngine stats and recent_alerts history
+        if engine:
+            with engine._lock:
+                engine.stats["attack_packets"] += 1
+                engine.recent_alerts.append(alert)
+                engine.recent_packets.append(alert)
+                engine._update_threat_level()
+
+        # 2. Broadcast immediately over Socket.IO to connected clients
+        if socketio and not app.config.get("TESTING"):
+            try:
+                socketio.emit("alert", alert)
+            except Exception as e:
+                log.debug("SocketIO emit alert failed: %s", e)
+
+        # 3. Enqueue for AI analysis
+        ai_manager.enqueue(alert)
+
+        return jsonify({
+            "status": "success",
+            "message": "Alert injected, broadcasted, and enqueued for AI analysis.",
+            "alert_id": alert["id"],
+        }), 201
 
     # ── GET /api/v1/logs ───────────────────────────────────────────────────
     @app.get("/api/v1/logs")
@@ -481,6 +534,121 @@ def create_app() -> Flask:
             }
 
         return jsonify(health), 200
+
+    @app.post("/api/ai/analyze-threat")
+    def ai_analyze_threat() -> Response:
+        """
+        Trigger AI analysis on-demand for a single threat alert.
+        Triggered when the user clicks 'AI Analysis' button on a threat.
+        """
+        from backend.ai.queue import get_ai_manager
+
+        body = request.get_json(silent=True)
+        if not body:
+            return jsonify({"error": "Request body must be JSON."}), 400
+
+        alert_id = body.get("alert_id") or body.get("id")
+        alert_data = body.get("alert") if "alert" in body and isinstance(body.get("alert"), dict) else body
+
+        # If alert_id is provided, search engine's recent alerts if fields are sparse
+        if engine and alert_id and (not alert_data or "src_ip" not in alert_data):
+            with engine._lock:
+                for a in engine.recent_alerts:
+                    if a.get("id") == alert_id or a.get("alert_id") == alert_id:
+                        alert_data = dict(a)
+                        break
+
+        if not alert_data or not isinstance(alert_data, dict):
+            return jsonify({"error": "Valid alert object or alert_id is required."}), 400
+
+        ai_manager = get_ai_manager()
+        ai_manager.enqueue(alert_data, force=True)
+
+        return jsonify({
+            "status": "queued",
+            "alert_id": alert_data.get("id") or alert_id,
+            "message": "AI analysis started for threat.",
+        }), 200
+
+    @app.post("/api/ai/investigate")
+    def ai_investigate() -> Response:
+        """
+        Investigate an alert or network attacks with a specific question.
+        Supports both targeted single-alert questions and general dashboard inquiries.
+        """
+        from backend.ai.alert_analyzer import get_alert_analyzer
+        from backend.ai.queue import get_ai_manager
+        from backend.ai.schemas import AlertContext
+        
+        body = request.get_json(silent=True)
+        if not body or not body.get("question"):
+            return jsonify({"error": "Request body must include 'question'."}), 400
+            
+        alert_id = str(body.get("alert_id") or "").strip()
+        question = str(body["question"])
+        
+        ai_manager = get_ai_manager()
+        alert_ctx = None
+        related_alerts_str = []
+
+        if alert_id and alert_id not in ("general", "all", "system"):
+            state = ai_manager.get_analysis_state(alert_id)
+            if state and state.get("alert"):
+                alert_ctx = state["alert"]
+            elif engine:
+                with engine._lock:
+                    for a in engine.recent_alerts:
+                        if a.get("id") == alert_id or a.get("alert_id") == alert_id:
+                            alert_ctx = ai_manager.normalize_alert(a)
+                            break
+            if not alert_ctx:
+                return jsonify({"error": f"Alert '{alert_id}' not found."}), 404
+                
+            related_states = ai_manager.get_related_alerts(alert_id, alert_ctx)
+            for rs in related_states:
+                ctx = rs.get("alert")
+                if ctx:
+                    related_alerts_str.append(f"Alert {ctx.alert_id}: {ctx.attack_type} src={ctx.source_ip} dst={ctx.destination_ip}")
+        else:
+            # General query across recent alerts
+            recent_attacks = []
+            if engine:
+                with engine._lock:
+                    recent_attacks = list(engine.recent_alerts)[-10:]
+
+            if recent_attacks:
+                latest = recent_attacks[-1]
+                alert_ctx = ai_manager.normalize_alert(latest)
+                for a in recent_attacks:
+                    related_alerts_str.append(
+                        f"Threat {a.get('id', 'unknown')}: {a.get('attack_type', 'Scan/Intrusion')} "
+                        f"from {a.get('src_ip', '?')} to {a.get('dst_ip', '?')} "
+                        f"sev={a.get('severity', 'HIGH')} conf={a.get('confidence_pct', 0)}%"
+                    )
+            else:
+                alert_ctx = AlertContext(
+                    alert_id="system-overview",
+                    timestamp=datetime.now().isoformat(),
+                    source_ip="0.0.0.0",
+                    destination_ip="0.0.0.0",
+                    source_port=0,
+                    destination_port=0,
+                    protocol="TCP",
+                    attack_type="System Baseline",
+                    detector="ids-engine",
+                    confidence=1.0,
+                    evidence=["No active threats detected in current monitoring session."],
+                )
+                related_alerts_str.append("System is clean. No active attack vectors detected.")
+        
+        analyzer = get_alert_analyzer()
+        try:
+            response = analyzer.investigate(alert_ctx, question, related_alerts_str)
+        except Exception as exc:
+            log.error("AI investigate failed: %s", exc)
+            return jsonify({"error": "AI investigation failed.", "detail": str(exc)}), 502
+            
+        return jsonify(response.model_dump()), 200
 
     # ── RAG layer endpoints (/api/rag/*) ────────────────────────────────────
     # Phase 2: local knowledge retrieval endpoints.

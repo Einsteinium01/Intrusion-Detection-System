@@ -48,12 +48,12 @@ class AIConfig(BaseSettings):
     )
 
     # ── Feature flag ─────────────────────────────────────────────────────────
-    ai_enabled: bool = False
+    ai_enabled: bool = True
     """Set AI_ENABLED=true to activate the LLM analysis endpoints."""
 
     # ── Provider selection ───────────────────────────────────────────────────
     llm_provider: str = "groq"
-    """LLM provider identifier.  Currently only 'groq' is implemented."""
+    """LLM provider identifier. 'groq' or 'mock'."""
 
     # ── Groq settings ────────────────────────────────────────────────────────
     groq_api_key: Optional[SecretStr] = None
@@ -77,11 +77,24 @@ class AIConfig(BaseSettings):
     groq_max_retries: int = 2
     """Number of automatic retries on transient network errors."""
 
+    # ── AI Queue settings ────────────────────────────────────────────────────
+    ai_auto_analyze_alerts: bool = True
+    """Automatically queue IDS alerts for AI analysis."""
+
+    ai_queue_max_size: int = 1000
+    """Maximum number of pending alerts in the async queue."""
+
+    ai_analysis_timeout: float = 60.0
+    """Timeout for the background analysis task in seconds."""
+
+    ai_duplicate_window: float = 300.0
+    """Time in seconds to suppress duplicate alerts for the same source/dest/attack."""
+
     # ── Validators ───────────────────────────────────────────────────────────
     @field_validator("llm_provider")
     @classmethod
     def _validate_provider(cls, v: str) -> str:
-        allowed = {"groq"}  # extend as new providers are added
+        allowed = {"groq", "mock"}  # extend as new providers are added
         v = v.lower().strip()
         if v not in allowed:
             raise ValueError(f"LLM_PROVIDER must be one of {allowed}, got '{v}'")
@@ -103,7 +116,7 @@ class AIConfig(BaseSettings):
 
     @model_validator(mode="after")
     def _warn_if_enabled_without_key(self) -> "AIConfig":
-        if self.ai_enabled and not self.groq_api_key:
+        if self.ai_enabled and self.llm_provider == "groq" and not self.groq_api_key:
             log.warning(
                 "AI_ENABLED=true but GROQ_API_KEY is not set. "
                 "All /api/ai/* requests will return 503 until the key is configured."
@@ -118,6 +131,7 @@ class AIConfig(BaseSettings):
         """
         return {
             "ai_enabled": self.ai_enabled,
+            "ai_auto_analyze_alerts": self.ai_auto_analyze_alerts,
             "llm_provider": self.llm_provider,
             "groq_model": self.groq_model,
             "groq_reasoning_effort": self.groq_reasoning_effort,
@@ -125,8 +139,12 @@ class AIConfig(BaseSettings):
         }
 
     def is_configured(self) -> bool:
-        """True when the AI layer is both enabled and has a provider key."""
-        return self.ai_enabled and bool(self.groq_api_key)
+        """True when the AI layer is both enabled and has a valid provider configuration."""
+        if not self.ai_enabled:
+            return False
+        if self.llm_provider == "mock":
+            return True
+        return bool(self.groq_api_key)
 
 
 # ---------------------------------------------------------------------------

@@ -153,6 +153,15 @@ class AlertAnalysis(BaseModel):
     )
 
 
+class InvestigationResponse(BaseModel):
+    """
+    Structured AI-generated response for an investigation query.
+    """
+    answer: str = Field(description="Direct answer to the analyst's question based on the evidence.")
+    supporting_evidence: List[str] = Field(description="Bullet points of evidence supporting the answer.")
+    related_findings: List[str] = Field(description="Any related findings or alerts.")
+    sources: List[Source] = Field(description="Knowledge sources referenced in this answer.")
+
 # ---------------------------------------------------------------------------
 # INPUT schema
 # ---------------------------------------------------------------------------
