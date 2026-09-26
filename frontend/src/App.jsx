@@ -9,6 +9,7 @@ import NetworkFlowsPage from './pages/NetworkFlowsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import LogsPage from './pages/LogsPage';
 import SettingsPage from './pages/SettingsPage';
+import AiChatOverlay from './components/AiChatOverlay';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -51,6 +52,9 @@ export default function App() {
             {renderActiveModule()}
           </main>
         </div>
+
+        {/* Global Floating AI Security Copilot Overlay */}
+        <AiChatOverlay />
       </div>
     </MonitoringProvider>
   );

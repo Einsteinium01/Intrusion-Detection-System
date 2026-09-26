@@ -63,6 +63,27 @@ export const apiService = {
   getExportCsvUrl(type = 'alerts', limit = 500) {
     return `${API_BASE_URL}/export/csv?type=${encodeURIComponent(type)}&limit=${limit}`;
   },
+
+  // Trigger on-demand AI analysis for a specific threat
+  async triggerAiAnalysis(alert) {
+    const response = await axios.post('http://localhost:5000/api/ai/analyze-threat', { alert });
+    return response.data;
+  },
+
+  // Ask AI / LLM about threats or investigation
+  async investigateThreat(alertId, question) {
+    const response = await axios.post('http://localhost:5000/api/ai/investigate', {
+      alert_id: alertId || '',
+      question,
+    });
+    return response.data;
+  },
+
+  // Get AI status and model health
+  async getAiStatus() {
+    const response = await axios.get('http://localhost:5000/api/ai/status');
+    return response.data;
+  },
 };
 
 export default apiService;

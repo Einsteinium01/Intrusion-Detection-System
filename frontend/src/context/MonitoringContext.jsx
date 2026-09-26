@@ -42,6 +42,7 @@ export function MonitoringProvider({ children }) {
   const [flows, setFlows] = useState([]);
   const [modelInfo, setModelInfo] = useState(null);
   const [trafficHistory, setTrafficHistory] = useState([]);
+  const [aiAnalysis, setAiAnalysis] = useState({}); // Store AI analysis state per alert_id
   const [securityEvents, setSecurityEvents] = useState([
     {
       id: 'init-1',
@@ -162,12 +163,28 @@ export function MonitoringProvider({ children }) {
     }
   }, [recordTrafficPoint]);
 
+  const fetchAlerts = useCallback(async () => {
+    try {
+      const data = await apiService.getAlerts(50);
+      if (data.alerts && data.alerts.length > 0) {
+        setAlerts((prev) => {
+          const existingIds = new Set(prev.map((a) => a.id));
+          const newItems = data.alerts.filter((a) => !existingIds.has(a.id));
+          return [...prev, ...newItems].slice(0, 100);
+        });
+      }
+    } catch (err) {
+      console.debug('Failed to fetch initial alerts:', err.message);
+    }
+  }, []);
+
   // Initial load
   useEffect(() => {
     fetchInterfaces();
     fetchModelInfo();
     fetchStatus();
     fetchFlows();
+    fetchAlerts();
 
     const statusTimer = setInterval(() => {
       fetchStatus();
@@ -175,7 +192,7 @@ export function MonitoringProvider({ children }) {
     }, 2000);
 
     return () => clearInterval(statusTimer);
-  }, [fetchInterfaces, fetchModelInfo, fetchStatus, fetchFlows]);
+  }, [fetchInterfaces, fetchModelInfo, fetchStatus, fetchFlows, fetchAlerts]);
 
   // Socket.IO event subscribers
   useEffect(() => {
@@ -210,6 +227,31 @@ export function MonitoringProvider({ children }) {
     socketService.on('packet', handlePacket);
     socketService.on('alert', handleAlert);
     socketService.on('status', handleStatus);
+
+    const handleAiStarted = (data) => {
+      setAiAnalysis((prev) => ({
+        ...prev,
+        [data.alert_id]: { state: 'ANALYZING', timestamp: data.timestamp }
+      }));
+    };
+    
+    const handleAiCompleted = (data) => {
+      setAiAnalysis((prev) => ({
+        ...prev,
+        [data.alert_id]: { state: 'COMPLETED', analysis: data.analysis, timestamp: data.timestamp }
+      }));
+    };
+    
+    const handleAiFailed = (data) => {
+      setAiAnalysis((prev) => ({
+        ...prev,
+        [data.alert_id]: { state: 'FAILED', error: data.error, timestamp: data.timestamp }
+      }));
+    };
+
+    socketService.on('ai_analysis_started', handleAiStarted);
+    socketService.on('ai_analysis_completed', handleAiCompleted);
+    socketService.on('ai_analysis_failed', handleAiFailed);
 
     // Batch UI updates every 250ms
     const batchTimer = setInterval(() => {
@@ -249,6 +291,9 @@ export function MonitoringProvider({ children }) {
       socketService.off('packet', handlePacket);
       socketService.off('alert', handleAlert);
       socketService.off('status', handleStatus);
+      socketService.off('ai_analysis_started', handleAiStarted);
+      socketService.off('ai_analysis_completed', handleAiCompleted);
+      socketService.off('ai_analysis_failed', handleAiFailed);
     };
   }, [recordTrafficPoint]);
 
@@ -348,6 +393,7 @@ export function MonitoringProvider({ children }) {
     modelInfo,
     securityEvents,
     trafficHistory,
+    aiAnalysis,
     error,
     isLoading,
 

@@ -4,18 +4,41 @@ import {
   AlertTriangle,
   Search,
   X,
-  ChevronRight,
   Shield,
   Activity,
+  Brain,
+  Sparkles,
 } from 'lucide-react';
 import { useMonitoring } from '../context/MonitoringContext';
+import { apiService } from '../services/api';
+import AiAnalysisPanel from '../components/AiAnalysisPanel';
+import InvestigationChat from '../components/InvestigationChat';
 
 export default function ThreatsPage() {
-  const { alerts, isMonitoring } = useMonitoring();
+  const { alerts, isMonitoring, aiAnalysis } = useMonitoring();
 
   const [selectedThreat, setSelectedThreat] = useState(null);
   const [severityFilter, setSeverityFilter] = useState('ALL');
   const [searchFilter, setSearchFilter] = useState('');
+
+  const currentThreatId = selectedThreat ? (selectedThreat.id || selectedThreat.alert_id) : null;
+
+  const handleOpenAiAnalysis = async (alert) => {
+    if (!alert) return;
+    setSelectedThreat(alert);
+    const alertId = alert.id || alert.alert_id;
+    const currentState = aiAnalysis[alertId]?.state;
+
+    // Trigger LLM analysis only if not already running or completed
+    if (!currentState || currentState === 'FAILED' || currentState === 'IDLE') {
+      try {
+        await apiService.triggerAiAnalysis(alert);
+      } catch (err) {
+        console.error('Failed to trigger AI analysis:', err);
+      }
+    }
+  };
+
 
   // Tally severity counts from real alerts
   const criticalCount = alerts.filter((a) => (a.severity || '').toUpperCase() === 'CRITICAL').length;
@@ -202,9 +225,20 @@ export default function ThreatsPage() {
                         </span>
                       </td>
                       <td className="py-2.5 px-3 font-mono text-right text-[#F4F7FB]">{conf}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <button className="p-1 rounded hover:bg-[#202735] text-[#62E8F7]">
-                          <ChevronRight className="w-4 h-4" />
+                      <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => handleOpenAiAnalysis(alert)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-semibold bg-[#A78BFA]/10 hover:bg-[#A78BFA]/20 text-[#A78BFA] border border-[#A78BFA]/30 hover:border-[#A78BFA]/60 transition-all cursor-pointer shadow-sm active:scale-95"
+                          title="Open AI Security Analysis"
+                        >
+                          <Brain className="w-3.5 h-3.5 text-[#A78BFA]" />
+                          <span>AI Analysis</span>
+                          {aiAnalysis[alert.id || alert.alert_id]?.state === 'COMPLETED' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#35D07F]" title="Analysis Ready" />
+                          )}
+                          {aiAnalysis[alert.id || alert.alert_id]?.state === 'ANALYZING' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#F5B84B] animate-ping" title="Analyzing..." />
+                          )}
                         </button>
                       </td>
                     </tr>
@@ -296,6 +330,16 @@ export default function ThreatsPage() {
                 </div>
               </div>
             </div>
+            
+            {/* AI Analysis Panel */}
+            <AiAnalysisPanel
+              alert={selectedThreat}
+              aiState={currentThreatId ? aiAnalysis[currentThreatId] : undefined}
+              onTriggerAnalysis={() => handleOpenAiAnalysis(selectedThreat)}
+            />
+            
+            {/* AI Investigation Chat */}
+            <InvestigationChat alertId={currentThreatId} />
           </div>
         </div>
       )}
