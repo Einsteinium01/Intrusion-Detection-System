@@ -42,15 +42,20 @@ class AlertAnalyzer:
     """
     Orchestrates the end-to-end pipeline from IDS alert → LLM analysis.
 
-    Lifecycle::
+    Phase 2: When a RAGRetriever is configured and RAG is enabled, the
+    analyzer automatically populates KnowledgeContext before calling the LLM.
 
-        analyzer = AlertAnalyzer()
-        analysis = analyzer.analyze(alert_ctx)  # returns AlertAnalysis
+    Pipeline::
 
-    Thread safety: ``AlertAnalyzer`` is stateless between calls (no
-    mutable shared state).  The underlying provider may or may not be
-    thread-safe depending on the SDK; the Groq SDK uses httpx which is
-    thread-safe for concurrent calls.
+        AlertContext
+          → RAGRetriever.retrieve_for_alert()  [Phase 2]
+          → KnowledgeContext
+          → PromptBuilder.build()
+          → LLMProvider.analyze()
+          → AlertAnalysis
+
+    Thread safety: stateless between calls.  The Groq SDK (httpx) and
+    FAISS are both safe for concurrent reads.
     """
 
     def __init__(
@@ -58,10 +63,15 @@ class AlertAnalyzer:
         provider: Optional[LLMProvider] = None,
         builder: Optional[PromptBuilder] = None,
         config: Optional[AIConfig] = None,
+        rag_retriever=None,   # Optional[RAGRetriever] — avoids circular import
+        rag_enabled: Optional[bool] = None,
     ) -> None:
         self._config = config or get_ai_config()
-        self._provider = provider  # None → lazy-initialised on first call
+        self._provider = provider
         self._builder = builder or get_prompt_builder()
+        self._rag_retriever = rag_retriever   # lazy if None
+        # rag_enabled=None → follow RAGConfig; rag_enabled=False → skip RAG
+        self._rag_enabled = rag_enabled
         self._last_error: Optional[str] = None
         self._last_analysis_time: Optional[float] = None
 
@@ -77,12 +87,17 @@ class AlertAnalyzer:
         """
         Analyse a single IDS alert and return a structured AlertAnalysis.
 
+        Phase 2: If *knowledge* is None and RAG is enabled, the analyzer
+        automatically retrieves KnowledgeContext from the local RAG index.
+        Retrieval failures are non-fatal: analysis continues with an empty
+        KnowledgeContext so the LLM call is never blocked by RAG errors.
+
         Parameters
         ----------
         alert:
             Grounded AlertContext produced by the IDS pipeline.
         knowledge:
-            Optional RAG context.  Phase 1: pass None (empty context used).
+            Optional RAG context.  If None, auto-retrieved from RAG.
 
         Returns
         -------
@@ -107,8 +122,12 @@ class AlertAnalyzer:
             )
 
         provider = self._get_provider()
-        knowledge = knowledge or KnowledgeContext()
 
+        # ── Phase 2: RAG retrieval ──────────────────────────────────────
+        if knowledge is None:
+            knowledge = self._retrieve_knowledge(alert)
+
+        # ── Build prompts and call LLM ──────────────────────────────────
         system_prompt, user_prompt = self._builder.build(alert, knowledge)
 
         t0 = time.perf_counter()
@@ -117,7 +136,6 @@ class AlertAnalyzer:
         except LLMProviderError:
             raise
         except Exception as exc:
-            # Unexpected errors – wrap and re-raise
             msg = f"Unexpected error in AlertAnalyzer: {type(exc).__name__}"
             self._last_error = msg
             log.exception(msg)
@@ -128,9 +146,11 @@ class AlertAnalyzer:
         self._last_error = None
 
         log.info(
-            "AlertAnalyzer: analysis complete alert_id=%s severity=%s elapsed=%.2fs",
+            "AlertAnalyzer: analysis complete alert_id=%s severity=%s "
+            "rag_docs=%d elapsed=%.2fs",
             alert.alert_id,
             analysis.severity,
+            len(knowledge.documents),
             elapsed,
         )
         return analysis
@@ -176,6 +196,50 @@ class AlertAnalyzer:
         if self._provider is None:
             self._provider = get_llm_provider(self._config)
         return self._provider
+
+    def _retrieve_knowledge(self, alert: AlertContext) -> KnowledgeContext:
+        """
+        Auto-retrieve KnowledgeContext via RAG for the given alert.
+
+        Retrieval failures are non-fatal: returns an empty KnowledgeContext
+        so the LLM call is never blocked by RAG errors.
+
+        The RAGRetriever is imported lazily to avoid circular imports and to
+        keep the AI layer usable even when the RAG package is not installed.
+        """
+        try:
+            rag_enabled = self._rag_enabled
+            if rag_enabled is None:
+                # Follow RAGConfig setting
+                from backend.rag.config import get_rag_config
+                rag_enabled = get_rag_config().rag_enabled
+
+            if not rag_enabled:
+                return KnowledgeContext()
+
+            retriever = self._get_rag_retriever()
+            if retriever is None:
+                return KnowledgeContext()
+
+            return retriever.retrieve_for_alert(alert)
+
+        except Exception as exc:
+            log.warning(
+                "AlertAnalyzer: RAG retrieval failed (continuing without knowledge): %s",
+                exc,
+            )
+            return KnowledgeContext()
+
+    def _get_rag_retriever(self):
+        """Return the RAGRetriever, lazy-initialising it on first call."""
+        if self._rag_retriever is None:
+            try:
+                from backend.rag.retriever import get_rag_retriever
+                self._rag_retriever = get_rag_retriever()
+            except Exception as exc:
+                log.warning("AlertAnalyzer: could not init RAGRetriever: %s", exc)
+                return None
+        return self._rag_retriever
 
 
 # ---------------------------------------------------------------------------

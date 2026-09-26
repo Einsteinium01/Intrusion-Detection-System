@@ -594,15 +594,28 @@ class TestAIAPIEndpoints:
         assert "GROQ_API_KEY" not in raw
 
     def test_analyze_alert_returns_503_when_ai_disabled(self, ai_client):
-        """When AI_ENABLED=false the endpoint must return 503 Service Unavailable."""
+        """When the analyzer raises LLMProviderError (AI disabled / unconfigured),
+        the endpoint must return 503 Service Unavailable.
+
+        Phase 2 note: explicitly mock the analyzer so this test is independent
+        of the local .env configuration (user may have GROQ_API_KEY set).
+        """
+        from backend.ai.llm_service import LLMProviderError
+
         payload = _make_valid_alert_dict()
-        r = ai_client.post(
-            "/api/ai/analyze-alert",
-            json=payload,
-            content_type="application/json",
-        )
-        # AI is disabled by default in test env (no GROQ_API_KEY set)
-        assert r.status_code in (503, 400, 422)
+        with patch("backend.ai.alert_analyzer.get_alert_analyzer") as mock_get:
+            mock_analyzer = MagicMock()
+            mock_analyzer.analyze.side_effect = LLMProviderError(
+                "AI analysis is disabled. Set AI_ENABLED=true to enable it."
+            )
+            mock_get.return_value = mock_analyzer
+
+            r = ai_client.post(
+                "/api/ai/analyze-alert",
+                json=payload,
+                content_type="application/json",
+            )
+        assert r.status_code == 503
 
     def test_analyze_alert_rejects_invalid_payload(self, ai_client):
         r = ai_client.post(

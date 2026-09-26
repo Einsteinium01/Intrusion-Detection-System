@@ -1,0 +1,20 @@
+# data/rag/.gitignore
+# ====================
+# Exclude generated vector index files from version control.
+# These are large binary files that should be rebuilt locally.
+#
+# To rebuild: python -m backend.rag.ingest --source all
+
+# FAISS binary index
+index/
+
+# Metadata JSON (large; parallel to index)
+metadata/
+
+# Downloaded/copied source documents (large; user-provided)
+documents/enterprise-attack.json
+
+# Keep the directory structure
+!documents/.gitkeep
+!index/.gitkeep
+!metadata/.gitkeep

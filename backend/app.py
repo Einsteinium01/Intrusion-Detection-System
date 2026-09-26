@@ -482,12 +482,139 @@ def create_app() -> Flask:
 
         return jsonify(health), 200
 
+    # ── RAG layer endpoints (/api/rag/*) ────────────────────────────────────
+    # Phase 2: local knowledge retrieval endpoints.
+    # IMPORTANT: RAG is enrichment only — it does NOT perform detection.
+    # XGBoost and ScanDetector remain the authoritative detection components.
+
+    @app.get("/api/rag/status")
+    def rag_status() -> Response:
+        """
+        Return RAG layer status and configuration.
+
+        Never exposes server paths or secrets.
+        """
+        try:
+            from backend.rag.config import get_rag_config
+            from backend.rag.vector_store import get_vector_store
+
+            cfg = get_rag_config()
+            pub = cfg.to_public_dict()
+
+            # Vector store status (lazy load — do not create index if not exists)
+            try:
+                store = get_vector_store(index_path=cfg.index_path)
+                store_status = store.status
+                pub["vector_count"] = store_status.get("vector_count", 0)
+                pub["indexed_sources"] = store_status.get("indexed_sources", [])
+                pub["last_ingestion_time"] = store_status.get("last_ingestion_time")
+                pub["index_ready"] = store.count() > 0
+            except Exception as se:
+                pub["vector_count"] = 0
+                pub["indexed_sources"] = []
+                pub["index_ready"] = False
+                pub["last_ingestion_time"] = None
+                log.debug("RAG status: store access error: %s", se)
+
+        except Exception as exc:
+            log.error("RAG status failed: %s", exc)
+            pub = {
+                "rag_enabled": False,
+                "index_ready": False,
+                "last_error": str(exc),
+            }
+
+        return jsonify(pub), 200
+
+    @app.post("/api/rag/search")
+    def rag_search() -> Response:
+        """
+        Search the local RAG knowledge index.
+
+        POST body:
+          { "query": "...", "top_k": 5 }
+
+        Returns ranked knowledge documents with scores.
+        """
+        body = request.get_json(silent=True)
+        if not body or not body.get("query"):
+            return jsonify({"error": "Request body must include 'query'."}), 400
+
+        query = str(body["query"])[:1000]   # cap query length
+        top_k = min(int(body.get("top_k", 5)), 20)   # max 20 results
+
+        try:
+            from backend.rag.retriever import get_rag_retriever
+            retriever = get_rag_retriever()
+            docs = retriever.retrieve(query, top_k=top_k)
+            results = [doc.to_knowledge_doc() for doc in docs]
+        except Exception as exc:
+            log.error("RAG search failed: %s", exc)
+            return jsonify({"error": "RAG search failed.", "detail": str(exc)}), 500
+
+        return jsonify({
+            "query": query,
+            "top_k": top_k,
+            "count": len(results),
+            "results": results,
+        }), 200
+
+    @app.post("/api/rag/reindex")
+    def rag_reindex() -> Response:
+        """
+        Rebuild or update the local RAG knowledge index.
+
+        Runs in a background thread so it does NOT block packet capture.
+
+        POST body (all optional):
+          { "source": "all"|"project"|"mitre", "rebuild": false }
+        """
+        body = request.get_json(silent=True) or {}
+        source = body.get("source", "all")
+        rebuild = bool(body.get("rebuild", False))
+
+        if source not in ("all", "project", "mitre"):
+            return jsonify({"error": f"Invalid source '{source}'. Choose: all, project, mitre"}), 400
+
+        import threading
+
+        result_holder: dict = {}
+
+        def _run_ingest():
+            try:
+                from backend.rag.ingest import ingest
+                from backend.rag.vector_store import reset_vector_store
+                if rebuild:
+                    reset_vector_store()
+                stats = ingest(source=source, rebuild=rebuild)
+                result_holder["stats"] = stats.model_dump()
+                result_holder["error"] = None
+            except Exception as exc:
+                log.error("RAG reindex failed: %s", exc)
+                result_holder["error"] = str(exc)
+
+        thread = threading.Thread(target=_run_ingest, daemon=True, name="RAGReindexThread")
+        thread.start()
+        thread.join(timeout=300)   # wait up to 5 min; background if longer
+
+        if "error" in result_holder and result_holder["error"]:
+            return jsonify({"error": result_holder["error"]}), 500
+
+        stats = result_holder.get("stats", {})
+        return jsonify({
+            "status": "complete",
+            "source": source,
+            "rebuild": rebuild,
+            "stats": stats,
+        }), 200
+
     # ── Error handlers ──────────────────────────────────────────────────────
     @app.errorhandler(404)
     def not_found(_err: Any) -> Response:
         return jsonify({"error": "Endpoint not found."}), 404
 
     @app.errorhandler(405)
+
     def method_not_allowed(_err: Any) -> Response:
         return jsonify({"error": "Method not allowed."}), 405
 

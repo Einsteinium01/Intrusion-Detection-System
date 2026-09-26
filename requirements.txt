@@ -9,6 +9,9 @@ Werkzeug==3.1.8
 groq>=1.7.0                  # Official Groq Python SDK
 pydantic-settings>=2.0.0     # BaseSettings for env-driven config (Pydantic v2)
 
+# RAG layer (Phase 2) — local embeddings + vector search
+sentence-transformers>=2.2.0  # Local embedding model (all-MiniLM-L6-v2)
+faiss-cpu>=1.7.4              # FAISS vector index (CPU build)
 
 # Data science & ML
 numpy==1.26.4

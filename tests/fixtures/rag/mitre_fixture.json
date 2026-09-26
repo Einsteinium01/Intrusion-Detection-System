@@ -1,0 +1,79 @@
+{
+  "type": "bundle",
+  "id": "bundle--test-fixture-001",
+  "spec_version": "2.1",
+  "objects": [
+    {
+      "type": "attack-pattern",
+      "id": "attack-pattern--67073dde-d720-45ae-83da-b12d5e7edd6f",
+      "name": "Network Service Discovery",
+      "description": "Adversaries may attempt to get a listing of services running on remote hosts and local network infrastructure devices, including those that may be vulnerable to remote exploitation through exposed services.\nMethods to acquire this information include port scans and vulnerability scans using tools that are brought onto a system. Within cloud environments, cloud service APIs can also be used to enumerate services running on virtual infrastructure.",
+      "x_mitre_detection": "System and network discovery techniques normally occur throughout an operation as an adversary learns the environment. Data and events should not be viewed in isolation, but as part of a chain of behavior that could lead to other activities, such as Lateral Movement, based on the information obtained. Normal, benign system and network discovery may be mapped to the patterns seen, such as a user SSH-ing into a remote system and learning the network topology. Unusual discovery activity may indicate a reconnaissance phase. Port scans are common and may generate alerts if they come from unexpected hosts.",
+      "x_mitre_platforms": ["Linux", "macOS", "Windows", "Network"],
+      "kill_chain_phases": [
+        {
+          "kill_chain_name": "mitre-attack",
+          "phase_name": "discovery"
+        }
+      ],
+      "external_references": [
+        {
+          "source_name": "mitre-attack",
+          "external_id": "T1046",
+          "url": "https://attack.mitre.org/techniques/T1046"
+        }
+      ],
+      "modified": "2023-10-02T00:00:00.000Z"
+    },
+    {
+      "type": "attack-pattern",
+      "id": "attack-pattern--a62a8db3-f23a-4d8f-afd6-9dbc77e7813b",
+      "name": "Remote Services: SSH",
+      "description": "Adversaries may use Valid Accounts to log into remote machines using Secure Shell (SSH). The adversary may then perform actions as the logged-on user.\nSSH is implemented as protocols including SSH1 and SSH2. Adversaries may abuse legitimate access to move between systems within the same organization.",
+      "x_mitre_detection": "Use of SSH may be legitimate, depending upon the network environment and how it is used. Other factors, such as access patterns and activity that occurs after a remote login, may indicate suspicious or malicious behavior with SSH. Monitor for user accounts logged into systems they would not normally access or access patterns to multiple systems over a relatively short period of time.",
+      "x_mitre_platforms": ["Linux", "macOS"],
+      "kill_chain_phases": [
+        {
+          "kill_chain_name": "mitre-attack",
+          "phase_name": "lateral-movement"
+        }
+      ],
+      "external_references": [
+        {
+          "source_name": "mitre-attack",
+          "external_id": "T1021.004",
+          "url": "https://attack.mitre.org/techniques/T1021/004"
+        }
+      ],
+      "modified": "2023-04-15T00:00:00.000Z"
+    },
+    {
+      "type": "attack-pattern",
+      "id": "attack-pattern--ffe742ed-9100-4686-9e00-c331da544787",
+      "name": "OS Credential Dumping",
+      "description": "Adversaries may attempt to dump credentials to obtain account login and credential material, normally in the form of a hash or a clear text password, from the operating system and software. Credentials can then be used to perform Lateral Movement and access restricted information.",
+      "x_mitre_detection": "Monitor for unexpected processes interacting with lsass.exe in Windows. Common credential dumpers such as Mimikatz access the LSA Subsystem Service and target lsass.exe's memory for the NTLM password hash.",
+      "x_mitre_platforms": ["Windows", "Linux", "macOS"],
+      "kill_chain_phases": [
+        {
+          "kill_chain_name": "mitre-attack",
+          "phase_name": "credential-access"
+        }
+      ],
+      "external_references": [
+        {
+          "source_name": "mitre-attack",
+          "external_id": "T1003",
+          "url": "https://attack.mitre.org/techniques/T1003"
+        }
+      ],
+      "modified": "2023-06-01T00:00:00.000Z"
+    },
+    {
+      "type": "relationship",
+      "id": "relationship--test-001",
+      "relationship_type": "uses",
+      "description": "Test relationship object — should be ignored by the adapter"
+    }
+  ]
+}
