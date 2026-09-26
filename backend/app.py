@@ -403,6 +403,84 @@ def create_app() -> Flask:
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
 
+    # ── AI layer endpoints (/api/ai/*) ──────────────────────────────────────
+    # Phase 1: provider-independent LLM analysis for IDS alerts.
+    # IMPORTANT: These endpoints are completely additive.  No existing
+    # detection, capture, or dashboard behaviour is modified.
+
+    @app.post("/api/ai/analyze-alert")
+    def ai_analyze_alert() -> Response:
+        """
+        Analyse a single IDS alert with the configured LLM.
+
+        POST body: AlertContext JSON
+        Response: AlertAnalysis JSON  (200)
+                  Error JSON          (400 | 422 | 503)
+        """
+        from pydantic import ValidationError as PydanticValidationError
+        from backend.ai.alert_analyzer import get_alert_analyzer
+        from backend.ai.llm_service import LLMProviderError
+        from backend.ai.schemas import AlertContext
+
+        body = request.get_json(silent=True)
+        if body is None:
+            return jsonify({"error": "Request body must be JSON."}), 400
+
+        # Validate input against AlertContext schema
+        try:
+            alert_ctx = AlertContext(**body)
+        except PydanticValidationError as exc:
+            errors = exc.errors()
+            return jsonify({
+                "error": "Invalid AlertContext payload.",
+                "details": [
+                    {
+                        "field": ".".join(str(p) for p in e["loc"]),
+                        "message": e["msg"],
+                    }
+                    for e in errors[:10]
+                ],
+            }), 422
+
+        # Call the AI layer
+        try:
+            analyzer = get_alert_analyzer()
+            analysis = analyzer.analyze(alert_ctx)
+        except LLMProviderError as exc:
+            msg = str(exc)
+            # Distinguish "disabled / not configured" (503) from other errors (502)
+            if "disabled" in msg.lower() or "not configured" in msg.lower():
+                return jsonify({"error": msg}), 503
+            log.error("AI analysis failed: %s", msg)
+            return jsonify({"error": "AI analysis failed.", "detail": msg}), 502
+
+        return jsonify(analysis.model_dump()), 200
+
+    @app.get("/api/ai/status")
+    def ai_status() -> Response:
+        """
+        Return AI layer configuration and provider health.
+
+        Never returns the API key.
+        Response fields: enabled, provider, model, provider_healthy,
+                         last_error, reasoning_effort.
+        """
+        from backend.ai.alert_analyzer import get_alert_analyzer
+
+        try:
+            analyzer = get_alert_analyzer()
+            health = analyzer.health_check()
+        except Exception as exc:
+            log.error("AI status check failed: %s", exc)
+            health = {
+                "ai_enabled": False,
+                "llm_provider": "unknown",
+                "groq_model": "unknown",
+                "provider_healthy": False,
+                "last_error": "Status check failed.",
+            }
+
+        return jsonify(health), 200
 
     # ── Error handlers ──────────────────────────────────────────────────────
     @app.errorhandler(404)
@@ -437,8 +515,11 @@ def create_app() -> Flask:
     def on_request_status() -> None:
         socketio.emit("status", engine.get_live_stats(), to=request.sid)
 
-    log.info("Flask app created. Routes: GET / | POST /api/v1/start | POST /api/v1/stop "
-             "| GET /api/v1/status | GET /api/v1/alerts | GET /api/v1/logs")
+    log.info(
+        "Flask app created. Routes: GET / | POST /api/v1/start | POST /api/v1/stop "
+        "| GET /api/v1/status | GET /api/v1/alerts | GET /api/v1/logs "
+        "| POST /api/ai/analyze-alert | GET /api/ai/status"
+    )
 
     return app
 
