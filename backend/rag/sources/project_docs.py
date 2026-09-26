@@ -53,11 +53,13 @@ _EXCLUDED_DIR_PARTS = {
     ".git", "node_modules", ".venv", "venv", "__pycache__",
     ".pytest_cache", "dist", "build", "frontend",
     "dataset", "models", "reports",  # binary/training artifacts
+    "index", "metadata",             # RAG internal files
 }
 
 _EXCLUDED_SUFFIXES = {
     ".pkl", ".pyc", ".pyo", ".bin", ".npy", ".npz",
     ".csv", ".parquet", ".arrow", ".h5", ".hdf5",
+    ".json",                         # MITRE STIX + other JSON files handled by dedicated adapters
     ".png", ".jpg", ".jpeg", ".svg", ".ico",
     ".zip", ".tar", ".gz", ".whl",
     ".log",
@@ -233,20 +235,42 @@ class ProjectDocsAdapter:
         return None
 
     def _classify_source(self, path: pathlib.Path) -> str:
-        """Classify a file into a RAG source category."""
-        parts = set(p.lower() for p in path.parts)
-        name = path.name.lower()
+        """
+        Classify a file into a RAG source category based on its path and name.
 
-        if "mitre" in name:
-            return "attack_docs"
-        if any(x in name for x in ("attack", "exploit", "malware")):
-            return "attack_docs"
-        if any(x in name for x in ("playbook", "response", "remediat", "defend")):
+        Categories:
+          playbooks       — investigation response playbooks
+          detection_docs  — ScanDetector, XGBoost, feature, flow references
+          attack_docs     — attack type descriptions, CVE documentation
+          project_docs    — README, DESIGN, general project docs
+        """
+        try:
+            rel = path.relative_to(self._root)
+            parts_lower = [p.lower() for p in rel.parts]
+        except ValueError:
+            parts_lower = []
+
+        name = path.name.lower()
+        parts_set = set(parts_lower)
+
+        # Directory-based classification (highest priority)
+        if "playbooks" in parts_set:
             return "playbooks"
-        if any(x in name for x in ("detect", "scan", "feature", "extract")):
+        if "detection" in parts_set:
             return "detection_docs"
-        if any(x in parts for x in ("feature_extraction", "packet_capture")):
+        if "attacks" in parts_set or "attack_docs" in parts_set:
+            return "attack_docs"
+
+        # Name-based classification
+        if any(x in name for x in ("playbook", "response", "remediat", "defend", "incident")):
+            return "playbooks"
+        if any(x in name for x in ("attack", "exploit", "malware", "mitre", "threat")):
+            return "attack_docs"
+        if any(x in name for x in ("detect", "scan", "feature", "extract", "classifier", "xgboost", "flow")):
             return "detection_docs"
-        if any(x in parts for x in ("backend",)):
+
+        # Directory-based classification (fallback)
+        if parts_set & {"feature_extraction", "packet_capture", "backend"}:
             return "detection_docs"
+
         return SOURCE_NAME   # default: project_docs
