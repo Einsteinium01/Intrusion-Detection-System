@@ -54,3 +54,5 @@ skills-lock.json
 
 # Hidden directories
 .*/ 
+
+brag-output/
