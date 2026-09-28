@@ -1,6 +1,8 @@
 # Intelligent Real-time Network Traffic Analyzer for Intrusion Detection using Machine Learning 
 
-UNDER DEVELOPMENT
+Overview:
+
+https://github.com/user-attachments/assets/01f1b036-f95d-423e-92c3-0e5e805685b8
 
 **Real-Time Intrusion Detection using Machine Learning**
 
@@ -8,10 +10,11 @@ A web-based application that captures live network traffic from the local machin
 network-flow features, classifies each flow as *Normal* or *Malicious* using a trained
 Machine Learning model, and streams the results to a live dashboard in the browser.
 
-Final Year Engineering Project.
-
 ---
 Images:
+
+##dashboard:
+
 <img width="1917" height="902" alt="nids" src="https://github.com/user-attachments/assets/ac58968a-acc7-4e21-a814-5a213766562a" />
 <img width="1607" height="890" alt="threats dashboard" src="https://github.com/user-attachments/assets/aa6a9edb-c62c-406d-80c1-9b89064facf7" />
 <img width="1602" height="902" alt="threats module" src="https://github.com/user-attachments/assets/faecfa49-88ba-4ee8-bdc4-784486964972" />
