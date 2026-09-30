@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛡️ NetIntel — AI-Augmented Real-Time Network Intrusion Detection System
+# 🛡️AI-Augmented Real-Time Network Intrusion Detection System
 
 **Next-Generation Network Security Monitoring combining Live Packet Capture, Hybrid Machine Learning (XGBoost + ScanDetector), Local MITRE ATT&CK RAG Knowledge, and Groq-Powered LLM Reasoning.**
 
@@ -23,7 +23,7 @@
 
 ## 📺 Visual Walkthrough & Media
 
-### 📹 Full Live Demo Video
+### 📹 Video Overview
 Watch the end-to-end system in action — from live packet sniffing, XGBoost threat detection, to on-demand Groq AI forensic analysis and copilot interaction:
 
 https://github.com/user-attachments/assets/01f1b036-f95d-423e-92c3-0e5e805685b8
@@ -385,7 +385,7 @@ npm run build
 ## ⚖️ Ethical & Legal Disclaimer
 
 > [!WARNING]
-> NetIntel captures and inspects live network traffic on the host interface. It is designed strictly for **educational, defensive, and authorized research purposes**.
+> The IDS captures and inspects live network traffic on the host interface. It is designed strictly for **educational, defensive, and authorized research purposes**.
 > 
 > Only run this system on networks and hardware you own or have explicit, written authorization to monitor. Performing unauthorized packet sniffing or penetration testing against external systems is illegal in most jurisdictions.
 
