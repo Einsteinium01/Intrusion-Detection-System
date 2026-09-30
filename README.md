@@ -13,7 +13,7 @@ Machine Learning model, and streams the results to a live dashboard in the brows
 ---
 Images:
 
-##dashboard:
+Dashboard:
 
 <img width="1917" height="902" alt="nids" src="https://github.com/user-attachments/assets/ac58968a-acc7-4e21-a814-5a213766562a" />
 <img width="1607" height="890" alt="threats dashboard" src="https://github.com/user-attachments/assets/aa6a9edb-c62c-406d-80c1-9b89064facf7" />
