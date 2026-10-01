@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Network Traffic Analyzer Architecture</title>
+  <title>Network Traffic Analyzer - Runtime Architecture</title>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * {
@@ -41,12 +41,13 @@
       height: 12px;
       background: #22d3ee;
       border-radius: 50%;
+      box-shadow: 0 0 12px #22d3ee;
       animation: pulse 2s infinite;
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
     }
 
     h1 {
@@ -71,14 +72,14 @@
 
     svg {
       width: 100%;
-      min-width: 900px;
+      min-width: 960px;
       display: block;
     }
 
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.25rem;
       margin-top: 2rem;
     }
 
@@ -102,11 +103,11 @@
       border-radius: 50%;
     }
 
-    .card-dot.cyan { background: #22d3ee; }
-    .card-dot.emerald { background: #34d399; }
-    .card-dot.violet { background: #a78bfa; }
-    .card-dot.amber { background: #fbbf24; }
-    .card-dot.rose { background: #fb7185; }
+    .card-dot.cyan { background: #22d3ee; box-shadow: 0 0 8px #22d3ee; }
+    .card-dot.emerald { background: #34d399; box-shadow: 0 0 8px #34d399; }
+    .card-dot.violet { background: #a78bfa; box-shadow: 0 0 8px #a78bfa; }
+    .card-dot.amber { background: #fbbf24; box-shadow: 0 0 8px #fbbf24; }
+    .card-dot.rose { background: #fb7185; box-shadow: 0 0 8px #fb7185; }
 
     .card h3 {
       font-size: 0.875rem;
@@ -117,11 +118,27 @@
       list-style: none;
       color: #94a3b8;
       font-size: 0.75rem;
+      line-height: 1.6;
     }
 
     .card li {
       margin-bottom: 0.375rem;
     }
+
+    .card li strong {
+      color: #e2e8f0;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      margin-left: 4px;
+    }
+    .badge-primary { background: rgba(34, 211, 238, 0.15); color: #22d3ee; border: 1px solid rgba(34, 211, 238, 0.3); }
+    .badge-sec { background: rgba(251, 113, 133, 0.15); color: #fb7185; border: 1px solid rgba(251, 113, 133, 0.3); }
 
     .footer {
       text-align: center;
@@ -137,18 +154,30 @@
     <div class="header">
       <div class="header-row">
         <div class="pulse-dot"></div>
-        <h1>Network Traffic Analyzer Architecture</h1>
+        <h1>Intelligent Network Traffic Analyzer</h1>
       </div>
-      <p class="subtitle">High-level runtime execution flow and data paths</p>
+      <p class="subtitle">High-Level Runtime Architecture &amp; Primary Detection Pipeline</p>
     </div>
 
     <!-- Main Diagram -->
     <div class="diagram-container">
-      <svg viewBox="0 0 1000 580">
+      <svg viewBox="0 0 1000 640">
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
             <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowhead-primary" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <marker id="arrowhead-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <marker id="arrowhead-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
           </marker>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
             <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
@@ -158,200 +187,232 @@
         <!-- Background Grid -->
         <rect width="100%" height="100%" fill="url(#grid)" />
 
-        <!-- Trust Boundary 1: Local Network / Environment -->
-        <rect x="250" y="40" width="700" height="420" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
-        <text x="262" y="58" fill="#fbbf24" font-size="10" font-weight="600">Local System Boundary</text>
-
-        <!-- Trust Boundary 2: External API Security Group -->
-        <rect x="710" y="325" width="120" height="85" rx="8" fill="transparent" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,4"/>
-        <text x="718" y="339" fill="#fb7185" font-size="8">External AI Env</text>
-
-        <!-- Users -->
-        <rect x="40" y="80" width="100" height="50" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="90" y="100" fill="white" font-size="11" font-weight="600" text-anchor="middle">Users</text>
-        <text x="90" y="116" fill="#94a3b8" font-size="9" text-anchor="middle">Browser</text>
-
-        <!-- React Dashboard -->
-        <rect x="300" y="70" width="120" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="360" y="95" fill="white" font-size="11" font-weight="600" text-anchor="middle">React Dashboard</text>
-        <text x="360" y="111" fill="#94a3b8" font-size="9" text-anchor="middle">UI & WebSockets</text>
-
-        <!-- Flask API Server -->
-        <rect x="300" y="180" width="120" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="360" y="205" fill="white" font-size="11" font-weight="600" text-anchor="middle">Flask API Server</text>
-        <text x="360" y="221" fill="#94a3b8" font-size="9" text-anchor="middle">REST & Socket.IO</text>
-
-        <!-- Network Interfaces -->
-        <rect x="40" y="360" width="100" height="50" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="90" y="380" fill="white" font-size="11" font-weight="600" text-anchor="middle">Network</text>
-        <text x="90" y="396" fill="#94a3b8" font-size="9" text-anchor="middle">Interfaces</text>
-
-        <!-- Packet Sniffer -->
-        <rect x="300" y="350" width="120" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="360" y="375" fill="white" font-size="11" font-weight="600" text-anchor="middle">Packet Sniffer</text>
-        <text x="360" y="391" fill="#94a3b8" font-size="9" text-anchor="middle">Live Capture</text>
-
-        <!-- Feature Extractor -->
-        <rect x="470" y="350" width="120" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="530" y="375" fill="white" font-size="11" font-weight="600" text-anchor="middle">Feature Extractor</text>
-        <text x="530" y="391" fill="#94a3b8" font-size="9" text-anchor="middle">Flow Analytics</text>
-
-        <!-- Detection Engine -->
-        <rect x="470" y="180" width="120" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="530" y="205" fill="white" font-size="11" font-weight="600" text-anchor="middle">Detection Engine</text>
-        <text x="530" y="221" fill="#94a3b8" font-size="9" text-anchor="middle">Core Orchestrator</text>
-
-        <!-- ML Models -->
-        <rect x="650" y="180" width="100" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="700" y="205" fill="white" font-size="11" font-weight="600" text-anchor="middle">ML Models</text>
-        <text x="700" y="221" fill="#94a3b8" font-size="9" text-anchor="middle">XGBoost / RF</text>
-
-        <!-- AI Queue Manager -->
-        <rect x="470" y="70" width="120" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="530" y="95" fill="white" font-size="11" font-weight="600" text-anchor="middle">AI Queue Manager</text>
-        <text x="530" y="111" fill="#94a3b8" font-size="9" text-anchor="middle">Async Tasks</text>
-
-        <!-- Alert Analyzer -->
-        <rect x="650" y="70" width="120" height="60" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
-        <text x="710" y="95" fill="white" font-size="11" font-weight="600" text-anchor="middle">Alert Analyzer</text>
-        <text x="710" y="111" fill="#94a3b8" font-size="9" text-anchor="middle">LLM Agent</text>
-
-        <!-- RAG Vector Store -->
-        <rect x="820" y="70" width="100" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="870" y="95" fill="white" font-size="11" font-weight="600" text-anchor="middle">Vector Store</text>
-        <text x="870" y="111" fill="#94a3b8" font-size="9" text-anchor="middle">Knowledge Base</text>
-
-        <!-- LLM Provider API -->
-        <rect x="715" y="345" width="110" height="50" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-        <text x="770" y="365" fill="white" font-size="11" font-weight="600" text-anchor="middle">LLM Provider</text>
-        <text x="770" y="381" fill="#94a3b8" font-size="9" text-anchor="middle">External API</text>
-
         <!-- =================================================================
-             PATHS / EDGES
+             TRUST BOUNDARIES (Drawn early so they remain background layers)
              ================================================================= -->
 
-        <!-- User to Dashboard -->
-        <line x1="140" y1="100" x2="290" y2="100" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <text x="215" y="94" fill="#94a3b8" font-size="9" text-anchor="middle">HTTPS</text>
+        <!-- Boundary 1: Untrusted External Input Zone (Left) -->
+        <rect x="15" y="25" width="140" height="480" rx="12" fill="rgba(30, 41, 59, 0.15)" stroke="#475569" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="25" y="44" fill="#94a3b8" font-size="9" font-weight="600">UNTRUSTED / EXT ZONE</text>
 
-        <!-- Dashboard to API -->
-        <line x1="360" y1="130" x2="360" y2="170" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <text x="375" y="153" fill="#94a3b8" font-size="9">REST/WS</text>
+        <!-- Boundary 2: Host Runtime Trust Boundary (Local IDS Environment) -->
+        <rect x="175" y="25" width="620" height="480" rx="12" fill="rgba(251, 191, 36, 0.04)" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="8,4"/>
+        <text x="190" y="44" fill="#fbbf24" font-size="10" font-weight="600">TRUST BOUNDARY: Local IDS Runtime Environment (Loopback / IPC)</text>
 
-        <!-- API to Dashboard (Socket.IO Events) -->
-        <line x1="330" y1="180" x2="330" y2="140" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrowhead)"/>
-
-        <!-- Network to Sniffer -->
-        <line x1="140" y1="380" x2="290" y2="380" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <text x="215" y="374" fill="#94a3b8" font-size="9" text-anchor="middle">Raw Packets</text>
-
-        <!-- Sniffer to Extractor -->
-        <line x1="420" y1="380" x2="460" y2="380" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-        <!-- Extractor to Engine -->
-        <line x1="530" y1="350" x2="530" y2="250" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <text x="545" y="300" fill="#94a3b8" font-size="9">Flow Stats</text>
-
-        <!-- Engine to API -->
-        <line x1="470" y1="210" x2="430" y2="210" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-        <!-- Engine to Models -->
-        <line x1="590" y1="200" x2="640" y2="200" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        
-        <!-- Models back to Engine -->
-        <line x1="640" y1="220" x2="590" y2="220" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrowhead)"/>
-        <text x="615" y="235" fill="#a78bfa" font-size="9" text-anchor="middle">Predictions</text>
-
-        <!-- Engine to AI Queue -->
-        <line x1="530" y1="180" x2="530" y2="140" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <text x="545" y="165" fill="#94a3b8" font-size="9">Alerts</text>
-
-        <!-- API Server to AI Queue -->
-        <path d="M 420 190 L 440 190 Q 450 190 450 180 L 450 110 Q 450 100 460 100 L 465 100" fill="none" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-        <!-- AI Queue to Analyzer -->
-        <line x1="590" y1="100" x2="640" y2="100" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-        <!-- Analyzer to Vector Store -->
-        <line x1="770" y1="100" x2="810" y2="100" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-        <!-- Analyzer to LLM Provider -->
-        <path d="M 710 130 L 710 260 Q 710 280 730 280 L 750 280 Q 770 280 770 300 L 770 335" fill="none" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
-        <text x="785" y="270" fill="#fb7185" font-size="9">TLS (REST)</text>
-
+        <!-- Boundary 3: External AI Egress Boundary (Right) -->
+        <rect x="815" y="325" width="165" height="150" rx="8" fill="rgba(136, 19, 55, 0.08)" stroke="#fb7185" stroke-width="1.2" stroke-dasharray="4,4"/>
+        <text x="825" y="342" fill="#fb7185" font-size="8" font-weight="600">EXTERNAL EGRESS (TLS 1.3)</text>
 
         <!-- =================================================================
-             LEGEND
+             CONNECTION ARROWS (Drawn early so opaque box rects mask behind them)
              ================================================================= -->
-        <text x="50" y="490" fill="white" font-size="10" font-weight="600">Legend</text>
 
-        <rect x="50" y="502" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
-        <text x="72" y="510" fill="#94a3b8" font-size="8">Frontend</text>
+        <!-- PRIMARY PATH (Sequence 1 to 6) -->
 
-        <rect x="50" y="518" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
-        <text x="72" y="526" fill="#94a3b8" font-size="8">Backend Service</text>
+        <!-- 1. Network Tap -> Packet Sniffer -->
+        <line x1="145" y1="410" x2="195" y2="410" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-primary)"/>
+        <text x="170" y="402" fill="#22d3ee" font-size="8" text-anchor="middle" font-weight="600">① Pkts</text>
 
-        <rect x="50" y="534" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
-        <text x="72" y="542" fill="#94a3b8" font-size="8">AI/ML & Data</text>
+        <!-- 2. Packet Sniffer -> Flow Feature Extractor -->
+        <line x1="330" y1="410" x2="375" y2="410" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-primary)"/>
+        <text x="352" y="402" fill="#22d3ee" font-size="8" text-anchor="middle" font-weight="600">② Frames</text>
 
-        <rect x="180" y="502" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
-        <text x="202" y="510" fill="#94a3b8" font-size="8">Security Engine</text>
+        <!-- 3. Flow Feature Extractor -> Detection Engine -->
+        <line x1="520" y1="410" x2="565" y2="410" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-primary)"/>
+        <text x="542" y="402" fill="#22d3ee" font-size="8" text-anchor="middle" font-weight="600">③ 78-dim</text>
 
-        <rect x="180" y="518" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
-        <text x="202" y="526" fill="#94a3b8" font-size="8">Cloud/External</text>
+        <!-- Model Scoring Loop (Engine <-> ML Models) -->
+        <line x1="635" y1="380" x2="635" y2="305" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead-violet)"/>
+        <line x1="655" y1="305" x2="655" y2="380" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <text x="645" y="345" fill="#a78bfa" font-size="8" text-anchor="middle">Inference</text>
 
-        <line x1="180" y1="540" x2="196" y2="540" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3"/>
-        <text x="202" y="542" fill="#94a3b8" font-size="8">Encrypted Flow</text>
+        <!-- 4. Detection Engine -> Flask & Socket.IO API -->
+        <path d="M 590 380 L 590 190 Q 590 130 550 130 L 520 130" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-primary)"/>
+        <text x="598" y="240" fill="#22d3ee" font-size="8" font-weight="600">④ Alerts/Stats</text>
+
+        <!-- 5. Flask API -> React Dashboard -->
+        <line x1="375" y1="130" x2="330" y2="130" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-primary)"/>
+        <text x="352" y="122" fill="#22d3ee" font-size="8" text-anchor="middle" font-weight="600">⑤ Socket.IO</text>
+
+        <!-- 6. React Dashboard -> Security Analyst -->
+        <line x1="195" y1="130" x2="145" y2="130" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-primary)"/>
+        <text x="170" y="122" fill="#22d3ee" font-size="8" text-anchor="middle" font-weight="600">⑥ Visuals</text>
+
+        <!-- SUPPORTING ASYNC AI ENRICHMENT PATH (Dashed lines to avoid edge clutter) -->
+
+        <!-- Detection Engine -> AI Task Queue -->
+        <path d="M 705 410 L 740 410 Q 755 410 755 390 L 755 330" fill="none" stroke="#fb923c" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arrowhead)"/>
+        <text x="760" y="365" fill="#fb923c" font-size="7">enqueue()</text>
+
+        <!-- AI Task Queue -> Alert Analyzer -->
+        <line x1="812" y1="275" x2="812" y2="230" stroke="#fb923c" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arrowhead)"/>
+
+        <!-- Alert Analyzer <-> MITRE Vector Store -->
+        <line x1="812" y1="165" x2="812" y2="120" stroke="#a78bfa" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arrowhead-violet)"/>
+        <text x="825" y="145" fill="#a78bfa" font-size="7">RAG Top-K</text>
+
+        <!-- Alert Analyzer -> Cloud LLM Provider (Crosses Egress Boundary) -->
+        <path d="M 850 225 L 850 310 Q 850 330 870 330 L 890 330 Q 900 330 900 350 L 900 385" fill="none" stroke="#fb7185" stroke-width="1.4" stroke-dasharray="4,4" marker-end="url(#arrowhead-rose)"/>
+        <text x="915" y="315" fill="#fb7185" font-size="8">REST + Auth</text>
+
+        <!-- =================================================================
+             COMPONENT BOXES (8–12 Core Components with Opaque Underlays)
+             ================================================================= -->
+
+        <!-- 1. External: Network Tap / Raw Interface (External/Generic) -->
+        <rect x="25" y="380" width="120" height="60" rx="6" fill="#0f172a"/>
+        <rect x="25" y="380" width="120" height="60" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="85" y="405" fill="white" font-size="11" font-weight="600" text-anchor="middle">Network Tap</text>
+        <text x="85" y="421" fill="#94a3b8" font-size="9" text-anchor="middle">NIC / PCAP Stream</text>
+
+        <!-- 2. External: Security Analyst (External/Generic) -->
+        <rect x="25" y="100" width="120" height="60" rx="6" fill="#0f172a"/>
+        <rect x="25" y="100" width="120" height="60" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="85" y="125" fill="white" font-size="11" font-weight="600" text-anchor="middle">SecOps Analyst</text>
+        <text x="85" y="141" fill="#94a3b8" font-size="9" text-anchor="middle">Browser / WebApp</text>
+
+        <!-- 3. Frontend: React Dashboard (Frontend) -->
+        <rect x="195" y="100" width="135" height="60" rx="6" fill="#0f172a"/>
+        <rect x="195" y="100" width="135" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="262" y="125" fill="white" font-size="11" font-weight="600" text-anchor="middle">React Dashboard</text>
+        <text x="262" y="141" fill="#22d3ee" font-size="9" text-anchor="middle">Vite UI :5173</text>
+
+        <!-- 4. Backend Gateway: Flask API & Socket.IO (Backend) -->
+        <rect x="375" y="100" width="145" height="60" rx="6" fill="#0f172a"/>
+        <rect x="375" y="100" width="145" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="447" y="125" fill="white" font-size="11" font-weight="600" text-anchor="middle">Flask / Socket.IO</text>
+        <text x="447" y="141" fill="#94a3b8" font-size="9" text-anchor="middle">REST &amp; WS Engine</text>
+
+        <!-- 5. Ingestion: Packet Sniffer (Backend) -->
+        <rect x="195" y="380" width="135" height="60" rx="6" fill="#0f172a"/>
+        <rect x="195" y="380" width="135" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="262" y="405" fill="white" font-size="11" font-weight="600" text-anchor="middle">Packet Sniffer</text>
+        <text x="262" y="421" fill="#94a3b8" font-size="9" text-anchor="middle">Scapy / Raw Socket</text>
+
+        <!-- 6. Ingestion: Flow Feature Extractor (Backend) -->
+        <rect x="375" y="380" width="145" height="60" rx="6" fill="#0f172a"/>
+        <rect x="375" y="380" width="145" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="447" y="405" fill="white" font-size="11" font-weight="600" text-anchor="middle">Feature Extractor</text>
+        <text x="447" y="421" fill="#94a3b8" font-size="9" text-anchor="middle">Flow Windowing</text>
+
+        <!-- 7. Detection: Detection Engine Core (Backend) -->
+        <rect x="565" y="380" width="140" height="60" rx="6" fill="#0f172a"/>
+        <rect x="565" y="380" width="140" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="635" y="405" fill="white" font-size="11" font-weight="600" text-anchor="middle">Detection Engine</text>
+        <text x="635" y="421" fill="#94a3b8" font-size="9" text-anchor="middle">Thresholds &amp; Dispatch</text>
+
+        <!-- 8. ML Models: XGBoost & Random Forest (Database/ML) -->
+        <rect x="565" y="240" width="140" height="60" rx="6" fill="#0f172a"/>
+        <rect x="565" y="240" width="140" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="635" y="265" fill="white" font-size="11" font-weight="600" text-anchor="middle">ML Classifiers</text>
+        <text x="635" y="281" fill="#a78bfa" font-size="9" text-anchor="middle">XGBoost / RF Joblib</text>
+
+        <!-- 9. AI Worker: Async AI Task Queue (Message Bus) -->
+        <rect x="745" y="275" width="135" height="55" rx="6" fill="#0f172a"/>
+        <rect x="745" y="275" width="135" height="55" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="812" y="299" fill="white" font-size="11" font-weight="600" text-anchor="middle">AI Task Queue</text>
+        <text x="812" y="315" fill="#fb923c" font-size="8" text-anchor="middle">Worker Decoupling</text>
+
+        <!-- 10. AI Engine: Alert Analyzer Agent (Security) -->
+        <rect x="745" y="165" width="135" height="60" rx="6" fill="#0f172a"/>
+        <rect x="745" y="165" width="135" height="60" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="812" y="190" fill="white" font-size="11" font-weight="600" text-anchor="middle">Alert Analyzer</text>
+        <text x="812" y="206" fill="#fb7185" font-size="9" text-anchor="middle">Context Synthesizer</text>
+
+        <!-- 11. Knowledge: MITRE ATT&CK Vector Store (Database) -->
+        <rect x="745" y="60" width="135" height="55" rx="6" fill="#0f172a"/>
+        <rect x="745" y="60" width="135" height="55" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="812" y="84" fill="white" font-size="11" font-weight="600" text-anchor="middle">RAG Vector Store</text>
+        <text x="812" y="100" fill="#a78bfa" font-size="8" text-anchor="middle">MITRE ATT&amp;CK Index</text>
+
+        <!-- 12. External: Cloud LLM Provider (Cloud/External) -->
+        <rect x="835" y="390" width="125" height="60" rx="6" fill="#0f172a"/>
+        <rect x="835" y="390" width="125" height="60" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="897" y="415" fill="white" font-size="11" font-weight="600" text-anchor="middle">Cloud LLM API</text>
+        <text x="897" y="431" fill="#fbbf24" font-size="9" text-anchor="middle">Groq / OpenAI API</text>
+
+        <!-- =================================================================
+             LEGEND (Strict Rule: Placed >= 20px OUTSIDE all boundary boxes)
+             Boundary ends at y = 505. Legend placed at y = 540.
+             ================================================================= -->
+        <text x="25" y="550" fill="white" font-size="10" font-weight="600">Legend:</text>
+
+        <rect x="80" y="541" width="14" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="100" y="550" fill="#94a3b8" font-size="8">Frontend</text>
+
+        <rect x="160" y="541" width="14" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="180" y="550" fill="#94a3b8" font-size="8">Backend Service</text>
+
+        <rect x="275" y="541" width="14" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="295" y="550" fill="#94a3b8" font-size="8">Models / Database</text>
+
+        <rect x="405" y="541" width="14" height="10" rx="2" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1"/>
+        <text x="425" y="550" fill="#94a3b8" font-size="8">Async Task Queue</text>
+
+        <rect x="535" y="541" width="14" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="555" y="550" fill="#94a3b8" font-size="8">AI Security Agent</text>
+
+        <rect x="660" y="541" width="14" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="680" y="550" fill="#94a3b8" font-size="8">External Dependency</text>
+
+        <line x1="795" y1="546" x2="815" y2="546" stroke="#22d3ee" stroke-width="2"/>
+        <text x="822" y="550" fill="#94a3b8" font-size="8">Primary Detection Path</text>
+
+        <line x1="930" y1="546" x2="950" y2="546" stroke="#fb7185" stroke-width="1.2" stroke-dasharray="3,3"/>
+        <text x="957" y="550" fill="#94a3b8" font-size="8">Egress</text>
 
       </svg>
     </div>
 
-    <!-- Info Cards -->
+    <!-- Info Cards (Supporting detail placed here instead of adding extra edges) -->
     <div class="cards">
+      <!-- Card 1: Primary Pipeline -->
       <div class="card">
         <div class="card-header">
-          <div class="card-dot emerald"></div>
-          <h3>Detection Pipeline (Primary Path)</h3>
+          <div class="card-dot cyan"></div>
+          <h3>Primary Pipeline: Ingestion to Dashboard</h3>
         </div>
         <ul>
-          <li>• <strong>Packet Sniffer</strong> reads raw traffic via Scapy or pcap</li>
-          <li>• <strong>Feature Extractor</strong> computes aggregated flow statistics</li>
-          <li>• <strong>Detection Engine</strong> passes stats to ML Models</li>
-          <li>• <strong>ML Models</strong> classify flows as BENIGN or attack types</li>
-          <li>• Alerts emitted to API Server and Socket.IO clients</li>
+          <li>• <strong>Step ① (Tap):</strong> Captures live packets via Scapy / raw sockets in a non-blocking thread ring buffer.</li>
+          <li>• <strong>Step ② (Flow Extraction):</strong> Aggregates bidirectional flows (IP 5-tuples) and calculates 78+ statistical attributes over a sliding window.</li>
+          <li>• <strong>Step ③ (Inference Scoring):</strong> The singleton Detection Engine evaluates feature vectors against pre-trained XGBoost and Random Forest models.</li>
+          <li>• <strong>Step ④ (Gateway Dispatch):</strong> Threat classifications trigger alert events; periodic status updates (every 500ms) summarize flow metrics.</li>
+          <li>• <strong>Step ⑤ &amp; ⑥ (UI Stream):</strong> Flask-SocketIO pushes alerts instantly to the React console with 10 pkt/s display throttling to avoid client lag.</li>
         </ul>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot violet"></div>
-          <h3>AI Enrichment & RAG</h3>
-        </div>
-        <ul>
-          <li>• <strong>Queue Manager</strong> gathers background investigation requests</li>
-          <li>• <strong>Vector Store</strong> retrieves knowledge (MITRE ATT&CK context)</li>
-          <li>• <strong>Alert Analyzer</strong> builds prompt with alert info + RAG</li>
-          <li>• <strong>LLM API</strong> synthesizes root cause & response guidelines</li>
-        </ul>
-      </div>
-
+      <!-- Card 2: Trust Boundaries & Security Hardening -->
       <div class="card">
         <div class="card-header">
           <div class="card-dot rose"></div>
-          <h3>Trust Boundaries</h3>
+          <h3>Trust Boundaries &amp; Perimeter Security</h3>
         </div>
         <ul>
-          <li>• <strong>Local Network</strong> encapsulates capture and ML inferencing</li>
-          <li>• Strict CORS applied to React dashboard API access</li>
-          <li>• Rate limiting prevents unrestricted resource consumption</li>
-          <li>• <strong>External API</strong> connects to LLM over secure TLS</li>
+          <li>• <strong>Untrusted Ingress Zone:</strong> Raw network packets and external HTTP requests enter via untrusted boundaries; raw payloads are sanitized and inspected without direct execution.</li>
+          <li>• <strong>Local IDS Runtime Boundary:</strong> Packet sniffer, ML models, and Flask backend operate within an isolated local host process. Endpoints enforce strict CORS against unauthorized origins.</li>
+          <li>• <strong>API Hardening:</strong> Follows OWASP API doctrine: strict bounded limit params (max 500), no stack traces leaked in error responses, and anti-sniff headers on all responses.</li>
+          <li>• <strong>AI Egress Isolation:</strong> Outbound calls to cloud LLMs (Groq/OpenAI) traverse an explicit TLS boundary with API tokens stored strictly in environment variables.</li>
+        </ul>
+      </div>
+
+      <!-- Card 3: Asynchronous AI & Knowledge Retrieval -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>Asynchronous AI &amp; RAG Enrichment</h3>
+        </div>
+        <ul>
+          <li>• <strong>Queue Decoupling:</strong> Heavy LLM generation is completely isolated from real-time packet capture via a dedicated background task queue (<span class="badge badge-primary">AIManager</span>).</li>
+          <li>• <strong>Knowledge Retrieval (RAG):</strong> Alerts query the local MITRE ATT&amp;CK knowledge vector index to pull relevant adversary tactics, techniques, and IDs.</li>
+          <li>• <strong>Root Cause Synthesis:</strong> The Alert Analyzer packages telemetry + MITRE documentation to generate incident explanations and remediation recommendations.</li>
+          <li>• <strong>Additive Architecture:</strong> If the AI service is disabled or encounters network latency, core packet capture and ML classification continue without interruption.</li>
         </ul>
       </div>
     </div>
 
     <!-- Footer -->
     <p class="footer">
-      Network Traffic Analyzer • High-Level Architecture Diagram
+      Intelligent Network Traffic Analyzer • Architecture Specification • Self-contained Single-page Artifact
     </p>
   </div>
 </body>
